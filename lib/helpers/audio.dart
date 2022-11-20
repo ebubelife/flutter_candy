@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 class Audio {
   static AudioCache player = AudioCache();
@@ -20,14 +21,19 @@ class Audio {
       'audio/lost.wav',
     ]);
   }
+
   static play() async {
     AudioPlayer player = AudioPlayer();
+    player.setVolume(1.0);
     await player.setSourceAsset("assets/audio/swap.wav");
+    player.play(AssetSource("assets/audio/swap.wav"));
   }
 
   static playAsset(AudioType audioType) {
     AudioPlayer player = AudioPlayer();
+    player.setVolume(1);
     player.setSourceAsset('audio/${describeEnum(audioType)}.wav');
+    player.play(AssetSource("audio/${describeEnum(audioType)}.wav"));
   }
 }
 

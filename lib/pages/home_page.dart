@@ -1,4 +1,6 @@
 // @dart=2.9
+import 'dart:io';
+
 import 'package:flutter_candy/animations/shine_effect.dart';
 import 'package:flutter_candy/bloc/bloc_provider.dart';
 import 'package:flutter_candy/bloc/game_bloc.dart';
@@ -8,6 +10,11 @@ import 'package:flutter_candy/game_widgets/shadowed_text.dart';
 import 'package:flutter_candy/model/level.dart';
 import 'package:flutter_candy/pages/game_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_candy/ad_helper.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter_candy/helpers/audio.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -18,10 +25,18 @@ class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   AnimationController _controller;
   Animation _animation;
+  BannerAd _bannerAd;
+
+  //Googl ads variables for interstitial ads
+
+  InterstitialAd _interstitialAd;
+  int _numInterstitialLoadAttempts = 0;
+  int maxFailedLoadAttempts = 3;
 
   @override
   void initState() {
     super.initState();
+
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 3500),
@@ -40,15 +55,93 @@ class _HomePageState extends State<HomePage>
       ),
     );
 
+    BannerAd(
+      adUnitId: AdHelper.bannerAdUnitId,
+      request: AdRequest(),
+      size: AdSize.banner,
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          setState(() {
+            _bannerAd = ad as BannerAd;
+          });
+        },
+        onAdFailedToLoad: (ad, err) {
+          print('Failed to load a banner ad: ${err.message}');
+          ad.dispose();
+        },
+      ),
+    ).load();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _controller.forward();
     });
+
+    MobileAds.instance
+      ..initialize()
+      ..updateRequestConfiguration(RequestConfiguration(
+          testDeviceIds: ['86E14981427A5FB20C128519DC42A6E5']));
+
+    Audio.playAsset(AudioType.game_start);
   }
 
   @override
   void dispose() {
     _controller?.dispose();
+    _interstitialAd?.dispose();
     super.dispose();
+  }
+
+  //Create google interstitial ads
+
+  void _createInterstitialAd(Level level) {
+    InterstitialAd.load(
+      adUnitId: "ca-app-pub-3940256099942544/1033173712",
+      request: AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (InterstitialAd ad) {
+          _interstitialAd = ad;
+          _numInterstitialLoadAttempts = 0;
+          _showInterstitialAd(level);
+        },
+        onAdFailedToLoad: (LoadAdError error) {
+          _numInterstitialLoadAttempts += 1;
+          _interstitialAd = null;
+          if (_numInterstitialLoadAttempts < maxFailedLoadAttempts) {
+            _createInterstitialAd(level);
+          } else {
+           /* Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => GamePage()),
+              (route) => false,
+            );*/
+
+            Navigator.of(context).push(GamePage.route(level));
+          }
+        },
+      ),
+    );
+  }
+
+//show google interstitial ads
+  void _showInterstitialAd(Level level) {
+    if (_interstitialAd == null) {
+      print('Warning: attempt to show interstitial before loaded.');
+      return;
+    }
+    _interstitialAd.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (InterstitialAd ad) {
+        ad.dispose();
+       /* Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => GamePage()),
+          (route) => false,
+        );*/
+           Navigator.of(context).push(GamePage.route(level));
+
+      },
+    );
+    _interstitialAd.show();
+    _interstitialAd = null;
   }
 
   @override
@@ -68,6 +161,15 @@ class _HomePageState extends State<HomePage>
         onWillPop: () async => false,
         child: Stack(
           children: <Widget>[
+            if (_bannerAd != null)
+              Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  width: _bannerAd.size.width.toDouble(),
+                  height: _bannerAd.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd),
+                ),
+              ),
             Container(
               decoration: BoxDecoration(
                 image: DecorationImage(
@@ -81,7 +183,7 @@ class _HomePageState extends State<HomePage>
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: ShadowedText(
-                  text: 'by Kodeblooded',
+                  text: 'Kodeblooded Game Studios',
                   color: Colors.white,
                   fontSize: 12.0,
                   offset: Offset(1.0, 1.0),
@@ -111,10 +213,9 @@ class _HomePageState extends State<HomePage>
                         onTap: () async {
                           Level newLevel = await gameBloc?.setLevel(index + 1);
 
-                          print("eeded " + newLevel.toString());
-
+                          _createInterstitialAd(newLevel);
                           // Open the Game page
-                          Navigator.of(context).push(GamePage.route(newLevel));
+                          //Navigator.of(context).push(GamePage.route(newLevel));
                         },
                       );
                     },
@@ -130,8 +231,8 @@ class _HomePageState extends State<HomePage>
                 child: DoubleCurvedContainer(
                   width: screenSize.width - 60.0,
                   height: 150.0,
-                  outerColor: Colors.blue[700],
-                  innerColor: Colors.blue,
+                  outerColor: Color.fromARGB(255, 255, 145, 93),
+                  innerColor: Color.fromARGB(255, 155, 36, 0),
                   child: Stack(
                     children: <Widget>[
                       ShineEffect(
@@ -140,7 +241,7 @@ class _HomePageState extends State<HomePage>
                       Align(
                         alignment: Alignment.center,
                         child: ShadowedText(
-                          text: 'Flutter Candy',
+                          text: 'Fruity Crush',
                           color: Colors.white,
                           fontSize: 26.0,
                           shadowOpacity: 1.0,
@@ -156,5 +257,18 @@ class _HomePageState extends State<HomePage>
         ),
       ),
     );
+  }
+
+  Future<String> _getId() async {
+    var deviceInfo = DeviceInfoPlugin();
+    if (Platform.isIOS) {
+      // import 'dart:io'
+      var iosDeviceInfo = await deviceInfo.iosInfo;
+      return iosDeviceInfo.identifierForVendor; // unique ID on iOS
+    } else if (Platform.isAndroid) {
+      var androidDeviceInfo = await deviceInfo.androidInfo;
+      print("My device ID" + androidDeviceInfo.androidId);
+      return androidDeviceInfo.androidId; // unique ID on Android
+    }
   }
 }
